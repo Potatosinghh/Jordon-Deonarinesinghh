@@ -1,0 +1,360 @@
+import sys
+import json
+import datetime
+import hashlib
+import logging
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton,
+    QLabel, QLineEdit, QMessageBox, QInputDialog, QMainWindow
+)
+from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt
+
+# Constants
+USERS_FILE = "users_airline.json"
+FLIGHTS_FILE = "flights.json"
+BOOKINGS_FILE = "bookings_airline.json"
+BASE_PRICE = 100.00  # Base price in USD
+PER_KM_RATE = 0.10  # Per kilometer rate in USD
+
+# Set up logging
+logging.basicConfig(filename='airline_booking.log', level=logging.INFO, 
+                    format='%(asctime)s:%(levelname)s:%(message)s')
+
+# Load data from a file
+def load_data(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+# Save data to a file
+def save_data(file_path, data):
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
+
+class User:
+    def __init__(self, username, email, password):
+        self.username = username
+        self.email = email
+        self.password = self.hash_password(password)
+
+    @staticmethod
+    def hash_password(password):
+        return hashlib.sha256(password.encode('utf-8')).hexdigest()
+
+class Flight:
+    def __init__(self, flight_id, origin, destination, distance):
+        self.flight_id = flight_id
+        self.origin = origin
+        self.destination = destination
+        self.distance = distance
+
+class Booking:
+    def __init__(self, user, flight_id, distance):
+        self.user = user
+        self.flight_id = flight_id
+        self.distance = distance
+        self.fare = self.calculate_fare(distance)
+        self.date = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        self.status = "Confirmed"
+
+    @staticmethod
+    def calculate_fare(distance_km):
+        return BASE_PRICE + (distance_km * PER_KM_RATE)
+
+class AirlineSystemApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Airline Booking System")
+        self.setGeometry(100, 100, 600, 800)
+        self.setStyleSheet("background-color: #e0e0e0;")
+
+        self.central_widget = QWidget(self)
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+
+        self.title = QLabel("Welcome to Airline Booking System")
+        self.title.setFont(QFont("Arial", 24))
+        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setStyleSheet("color: #333; margin-bottom: 20px;")
+        self.layout.addWidget(self.title)
+
+        self.login_button = self.create_button("Login")
+        self.register_button = self.create_button("Register")
+        self.layout.addWidget(self.login_button)
+        self.layout.addWidget(self.register_button)
+
+        self.login_button.clicked.connect(self.show_login)
+        self.register_button.clicked.connect(self.show_registration)
+
+        self.current_user = None
+        self.users = load_data(USERS_FILE)
+        self.flights = load_data(FLIGHTS_FILE)
+        self.bookings = load_data(BOOKINGS_FILE)
+
+    def create_button(self, text):
+        button = QPushButton(text)
+        button.setFont(QFont("Arial", 14))
+        button.setStyleSheet("""
+            QPushButton {
+                background-color: #007BFF;
+                color: white;
+                border: none;
+                border-radius: 8px;
+                padding: 10px;
+                margin: 5px;
+            }
+            QPushButton:hover {
+                background-color: #0056b3;
+            }
+        """)
+        button.setFixedSize(200, 40)
+        return button
+
+    def clear_layout(self):
+        title_widget = self.title
+        for i in reversed(range(self.layout.count())):
+            widget = self.layout.itemAt(i).widget()
+            if widget is not None and widget != title_widget:
+                widget.deleteLater()
+
+    def show_login(self):
+        self.clear_layout()
+        self.title.setText("Login")
+        self.layout.addWidget(self.title)
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText("Username")
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(self.password_input)
+
+        self.login_submit_button = self.create_button("Login")
+        self.forgot_password_button = self.create_button("Forgot Password")
+        self.layout.addWidget(self.login_submit_button)
+        self.layout.addWidget(self.forgot_password_button)
+
+        self.login_submit_button.clicked.connect(self.login)
+        self.forgot_password_button.clicked.connect(self.reset_password)
+
+    def show_registration(self):
+        self.clear_layout()
+        self.title.setText("Register as User")
+        self.layout.addWidget(self.title)
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText("Username")
+        self.email_input = QLineEdit(self)
+        self.email_input.setPlaceholderText("Email")
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(self.email_input)
+        self.layout.addWidget(self.password_input)
+
+        self.register_button = self.create_button("Register")
+        self.layout.addWidget(self.register_button)
+        
+        self.register_button.clicked.connect(self.register_user)
+
+    def user_menu(self):
+        self.clear_layout()
+        self.title.setText("User Menu")
+        self.layout.addWidget(self.title)
+
+        self.view_flights_button = self.create_button("View Available Flights")
+        self.book_flight_button = self.create_button("Book a Flight")
+        self.view_history_button = self.create_button("View Booking History")
+        self.search_flights_button = self.create_button("Search Flights")
+        self.cancel_booking_button = self.create_button("Cancel Booking")
+        self.provide_feedback_button = self.create_button("Provide Feedback")
+        self.logout_button = self.create_button("Logout")
+
+        self.layout.addWidget(self.view_flights_button)
+        self.layout.addWidget(self.book_flight_button)
+        self.layout.addWidget(self.view_history_button)
+        self.layout.addWidget(self.search_flights_button)
+        self.layout.addWidget(self.cancel_booking_button)
+        self.layout.addWidget(self.provide_feedback_button)
+        self.layout.addWidget(self.logout_button)
+
+        self.view_flights_button.clicked.connect(self.view_available_flights)
+        self.book_flight_button.clicked.connect(self.book_flight)
+        self.view_history_button.clicked.connect(self.view_booking_history)
+        self.search_flights_button.clicked.connect(self.search_flights)
+        self.cancel_booking_button.clicked.connect(self.cancel_booking)
+        self.provide_feedback_button.clicked.connect(self.provide_feedback)
+        self.logout_button.clicked.connect(self.logout)
+
+    def login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        user = next((usr for usr in self.users if usr['username'] == username), None)
+        if user and user['password'] == User.hash_password(password):
+            self.current_user = username
+            logging.info(f"User '{username}' logged in.")
+            self.user_menu()
+        else:
+            QMessageBox.warning(self, "Error", "Invalid username or password.")
+
+    def register_user(self):
+        username = self.username_input.text()
+        email = self.email_input.text()
+        password = self.password_input.text()
+
+        if any(usr['username'] == username for usr in self.users):
+            QMessageBox.warning(self, "Error", "Username already exists.")
+            return
+
+        if not self.validate_email(email):
+            QMessageBox.warning(self, "Error", "Invalid email address.")
+            return
+
+        new_user = User(username, email, password)
+        self.users.append({"username": new_user.username, "email": new_user.email, "password": new_user.password})
+        save_data(USERS_FILE, self.users)
+
+        logging.info(f"User '{username}' registered.")
+        QMessageBox.information(self, "Success", "User registered successfully!")
+        self.clear_layout()
+        self.show_main_menu()
+
+    def view_available_flights(self):
+        flight_list = "\n".join(f"Flight ID: {flight['flight_id']} - From: {flight['origin']} - To: {flight['destination']} - Distance: {flight['distance']} km"
+                                for flight in self.flights)
+        if flight_list:
+            QMessageBox.information(self, "Available Flights", flight_list)
+        else:
+            QMessageBox.information(self, "No Flights", "No flights available.")
+
+    def search_flights(self):
+        origin, ok1 = QInputDialog.getText(self, "Search Flights", "Enter Origin:")
+        destination, ok2 = QInputDialog.getText(self, "Search Flights", "Enter Destination:")
+
+        if ok1 and ok2:
+            matching_flights = [flight for flight in self.flights if flight['origin'].lower() == origin.lower() and flight['destination'].lower() == destination.lower()]
+            if matching_flights:
+                flight_list = "\n".join(f"Flight ID: {flight['flight_id']} - From: {flight['origin']} - To: {flight['destination']} - Distance: {flight['distance']} km"
+                                        for flight in matching_flights)
+                QMessageBox.information(self, "Matching Flights", flight_list)
+            else:
+                QMessageBox.information(self, "No Matches", "No flights found for this route.")
+
+    def book_flight(self):
+        # Step 1: Display available flights
+        flight_list = "\n".join(
+            f"Flight ID: {flight['flight_id']} - From: {flight['origin']} - To: {flight['destination']} - Distance: {flight['distance']} km"
+            for flight in self.flights
+        )
+
+        selected_flight_id, ok1 = QInputDialog.getItem(
+            self, "Select Flight", "Available Flights:\n" + flight_list,
+            [flight['flight_id'] for flight in self.flights]
+        )
+
+        if ok1:
+            # Step 2: Input passenger details
+            passenger_name, ok2 = QInputDialog.getText(self, "Passenger Name", "Enter passenger name:")
+            if ok2 and passenger_name:
+                # Step 3: Input distance
+                distance, ok3 = QInputDialog.getInt(self, "Distance", "Enter distance (km):", 1)
+                if ok3:
+                    # Step 4: Calculate fare
+                    new_booking = Booking(self.current_user, selected_flight_id, distance)
+                    fare_breakdown = f"Base Fare: USD {BASE_PRICE:.2f}\nDistance Fare: USD {distance * PER_KM_RATE:.2f}\nTotal Fare: USD {new_booking.fare:.2f}"
+                    
+                    # Step 5: Confirm booking
+                    confirm_booking = QMessageBox.question(
+                        self, "Confirm Booking",
+                        f"Flight ID: {selected_flight_id}\nPassenger: {passenger_name}\n{fare_breakdown}\n\nDo you want to proceed?",
+                        QMessageBox.Yes | QMessageBox.No
+                    )
+
+                    if confirm_booking == QMessageBox.Yes:
+                        # Step 6: Save booking
+                        self.bookings.append({
+                            "user": self.current_user,
+                            "flight_id": new_booking.flight_id,
+                            "distance": new_booking.distance,
+                            "fare": new_booking.fare,
+                            "date": new_booking.date,
+                            "status": new_booking.status,
+                            "passenger_name": passenger_name
+                        })
+                        save_data(BOOKINGS_FILE, self.bookings)
+                        logging.info(f"User '{self.current_user}' booked flight '{selected_flight_id}' for {distance} km.")
+                        QMessageBox.information(self, "Success", f"Flight booked successfully! Estimated fare: USD {new_booking.fare:.2f}")
+
+    def view_booking_history(self):
+        history = "\n".join(f"Booking: Flight {b['flight_id']} - Distance: {b['distance']} km, Fare: USD {b['fare']:.2f}, Date: {b['date']}, Status: {b['status']}, Passenger: {b.get('passenger_name', 'N/A')}"
+                            for b in self.bookings if b['user'] == self.current_user)
+        if history:
+            QMessageBox.information(self, "Booking History", history)
+        else:
+            QMessageBox.information(self, "No Bookings", "No booking history found.")
+
+    def cancel_booking(self):
+        flight_id, ok = QInputDialog.getText(self, "Cancel Booking", "Enter Flight ID to cancel:")
+        if ok and flight_id:
+            for booking in self.bookings:
+                if booking['user'] == self.current_user and booking['flight_id'] == flight_id:
+                    booking['status'] = "Cancelled"
+                    save_data(BOOKINGS_FILE, self.bookings)
+                    logging.info(f"User '{self.current_user}' cancelled booking for flight '{flight_id}'.")
+                    QMessageBox.information(self, "Success", "Booking cancelled successfully!")
+                    return
+            QMessageBox.warning(self, "Error", "Booking not found.")
+
+    def provide_feedback(self):
+        feedback, ok = QInputDialog.getText(self, "Provide Feedback", "Enter your feedback:")
+        if ok and feedback:
+            logging.info(f"User '{self.current_user}' provided feedback: {feedback}")
+            QMessageBox.information(self, "Feedback", "Thank you for your feedback!")
+
+    def reset_password(self):
+        username = self.username_input.text()
+        new_password, ok = QInputDialog.getText(self, "Reset Password", "Enter new password:", QLineEdit.Password)
+        if ok and new_password:
+            for user in self.users:
+                if user['username'] == username:
+                    user['password'] = User.hash_password(new_password)
+                    save_data(USERS_FILE, self.users)
+                    logging.info(f"Password reset for user '{username}'.")
+                    QMessageBox.information(self, "Success", "Password reset successfully!")
+                    return
+            QMessageBox.warning(self, "Error", "Username not found.")
+
+    def validate_email(self, email):
+        return "@" in email and "." in email
+
+    def logout(self):
+        logging.info(f"User '{self.current_user}' logged out.")
+        self.current_user = None
+        self.show_main_menu()
+
+    def show_main_menu(self):
+        self.clear_layout()
+        self.title.setText("Welcome to Airline Booking System")
+        self.layout.addWidget(self.title)
+
+        self.login_button = self.create_button("Login")
+        self.register_button = self.create_button("Register")
+        self.layout.addWidget(self.login_button)
+        self.layout.addWidget(self.register_button)
+
+        self.login_button.clicked.connect(self.show_login)
+        self.register_button.clicked.connect(self.show_registration)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    airline_system_app = AirlineSystemApp()
+    airline_system_app.show()
+    sys.exit(app.exec_())
