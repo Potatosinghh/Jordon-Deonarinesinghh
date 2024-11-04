@@ -1,0 +1,387 @@
+import sys
+import json
+import datetime
+from PyQt5.QtWidgets import (
+    QApplication, QWidget, QVBoxLayout, QPushButton,
+    QLabel, QLineEdit, QMessageBox, QInputDialog, QMainWindow
+)
+from PyQt5.QtGui import QFont
+from PyQt5.QtCore import Qt
+
+# Constants
+CUSTOMERS_FILE = "customers.json"
+DRIVERS_FILE = "drivers.json"
+BOOKINGS_FILE = "bookings.json"
+BASE_FARE = 5.00
+PER_KM_RATE = 2.00
+
+# Load data from a file
+def load_data(file_path):
+    try:
+        with open(file_path, 'r') as file:
+            return json.load(file)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+# Save data to a file
+def save_data(file_path, data):
+    with open(file_path, 'w') as file:
+        json.dump(data, file, indent=4)
+
+# Function to estimate fare
+def calculate_fare(distance_km):
+    return BASE_FARE + (distance_km * PER_KM_RATE)
+
+# Main application class
+class TaxiBookingApp(QMainWindow):
+    def __init__(self):
+        super().__init__()
+        self.setWindowTitle("Taxi Booking System")
+        self.setGeometry(100, 100, 600, 800)
+        self.setStyleSheet("background-color: #f4f4f4;")
+
+        self.central_widget = QWidget(self)
+        self.setCentralWidget(self.central_widget)
+        self.layout = QVBoxLayout(self.central_widget)
+
+        self.title = QLabel("Welcome to Taxi Service")
+        self.title.setFont(QFont("Arial", 24))
+        self.title.setAlignment(Qt.AlignCenter)
+        self.title.setStyleSheet("color: #333; margin-bottom: 20px;")
+        self.layout.addWidget(self.title)
+
+        self.login_button = self.create_button("Login")
+        self.register_customer_button = self.create_button("Register as Customer")
+        self.register_driver_button = self.create_button("Register as Driver")
+        self.layout.addWidget(self.login_button)
+        self.layout.addWidget(self.register_customer_button)
+        self.layout.addWidget(self.register_driver_button)
+
+        self.login_button.clicked.connect(self.show_login)
+        self.register_customer_button.clicked.connect(self.show_registration_customer)
+        self.register_driver_button.clicked.connect(self.show_registration_driver)
+
+        self.current_user = None
+        self.user_type = None
+        self.customers = load_data(CUSTOMERS_FILE)
+        self.drivers = load_data(DRIVERS_FILE)
+        self.bookings = load_data(BOOKINGS_FILE)
+
+    def create_button(self, text):
+        button = QPushButton(text)
+        button.setFont(QFont("Arial", 14))
+        button.setStyleSheet("background-color: #007BFF; color: white; border: none; border-radius: 8px; padding: 10px; margin: 5px;")
+        button.setFixedSize(200, 40)
+        return button
+
+    def clear_layout(self):
+        title_widget = self.title
+        for i in reversed(range(self.layout.count())):
+            widget = self.layout.itemAt(i).widget()
+            if widget is not None and widget != title_widget:
+                widget.deleteLater()
+
+    def show_login(self):
+        self.clear_layout()
+        self.title.setText("Login")
+        self.layout.addWidget(self.title)
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText("Username")
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(self.password_input)
+
+        self.login_submit_button = self.create_button("Login")
+        self.forgot_password_button = self.create_button("Forgot Password")
+        self.layout.addWidget(self.login_submit_button)
+        self.layout.addWidget(self.forgot_password_button)
+
+        self.login_submit_button.clicked.connect(self.login)
+        self.forgot_password_button.clicked.connect(self.reset_password)
+
+    def show_registration_customer(self):
+        self.clear_layout()
+        self.title.setText("Register as Customer")
+        self.layout.addWidget(self.title)
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText("Username")
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(self.password_input)
+
+        self.register_button = self.create_button("Register")
+        self.layout.addWidget(self.register_button)
+        
+        self.register_button.clicked.connect(self.register_customer)
+
+    def show_registration_driver(self):
+        self.clear_layout()
+        self.title.setText("Register as Driver")
+        self.layout.addWidget(self.title)
+
+        self.username_input = QLineEdit(self)
+        self.username_input.setPlaceholderText("Username")
+        self.password_input = QLineEdit(self)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setEchoMode(QLineEdit.Password)
+
+        self.layout.addWidget(self.username_input)
+        self.layout.addWidget(self.password_input)
+
+        self.register_button = self.create_button("Register")
+        self.layout.addWidget(self.register_button)
+
+        self.register_button.clicked.connect(self.register_driver)
+
+    def customer_menu(self):
+        self.clear_layout()
+        self.title.setText("Customer Menu")
+        self.layout.addWidget(self.title)
+
+        self.book_ride_button = self.create_button("Book a Ride")
+        self.view_history_button = self.create_button("View Ride History")
+        self.cancel_ride_button = self.create_button("Cancel Ride")
+        self.view_drivers_button = self.create_button("View Available Drivers")
+        self.feedback_button = self.create_button("Provide Feedback")
+        self.schedule_ride_button = self.create_button("Schedule a Ride")
+        self.rate_ride_button = self.create_button("Rate a Ride")
+        self.logout_button = self.create_button("Logout")
+
+        self.layout.addWidget(self.book_ride_button)
+        self.layout.addWidget(self.view_history_button)
+        self.layout.addWidget(self.cancel_ride_button)
+        self.layout.addWidget(self.view_drivers_button)
+        self.layout.addWidget(self.feedback_button)
+        self.layout.addWidget(self.schedule_ride_button)
+        self.layout.addWidget(self.rate_ride_button)
+        self.layout.addWidget(self.logout_button)
+
+        self.book_ride_button.clicked.connect(self.book_ride)
+        self.view_history_button.clicked.connect(self.view_ride_history)
+        self.cancel_ride_button.clicked.connect(self.cancel_ride)
+        self.view_drivers_button.clicked.connect(self.view_available_drivers)
+        self.feedback_button.clicked.connect(self.provide_feedback)
+        self.schedule_ride_button.clicked.connect(self.schedule_ride)
+        self.rate_ride_button.clicked.connect(self.rate_ride)
+        self.logout_button.clicked.connect(self.logout)
+
+    def login(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        customer = next((cust for cust in self.customers if cust.get('username') == username and cust.get('password') == password), None)
+        if customer:
+            self.current_user = username
+            self.user_type = 'customer'
+            self.customer_menu()
+            return
+
+        driver = next((drv for drv in self.drivers if drv.get('username') == username and drv.get('password') == password), None)
+        if driver:
+            self.current_user = username
+            self.user_type = 'driver'
+            self.driver_menu()
+            return
+
+        QMessageBox.warning(self, "Error", "Invalid username or password.")
+
+    def register_customer(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        if any(cust.get('username') == username for cust in self.customers):
+            QMessageBox.warning(self, "Error", "Username already exists.")
+            return
+
+        new_customer = {
+            "username": username,
+            "password": password
+        }
+        self.customers.append(new_customer)
+        save_data(CUSTOMERS_FILE, self.customers)
+        QMessageBox.information(self, "Success", "Customer registered successfully!")
+        self.show_main_menu()
+
+    def register_driver(self):
+        username = self.username_input.text()
+        password = self.password_input.text()
+
+        if any(driver.get('username') == username for driver in self.drivers):
+            QMessageBox.warning(self, "Error", "Username already exists.")
+            return
+
+        new_driver = {
+            "username": username,
+            "password": password
+        }
+        self.drivers.append(new_driver)
+        save_data(DRIVERS_FILE, self.drivers)
+        QMessageBox.information(self, "Success", "Driver registered successfully!")
+        self.show_main_menu()
+
+    def book_ride(self):
+        from_location, ok1 = QInputDialog.getText(self, "Book a Ride", "Enter pickup location:")
+        to_location, ok2 = QInputDialog.getText(self, "Book a Ride", "Enter drop-off location:")
+        vehicle_type, ok3 = QInputDialog.getItem(self, "Select Vehicle Type", "Choose a vehicle type:", ["Car", "SUV", "Van", "Bus"], 0, False)
+
+        if ok1 and ok2 and ok3:
+            distance = 10  # Placeholder for distance calculation
+            fare = calculate_fare(distance)
+
+            available_drivers = [driver['username'] for driver in self.drivers]
+            selected_driver, ok4 = QInputDialog.getItem(self, "Select Driver", "Choose a driver:", available_drivers, 0, False)
+
+            if ok4:
+                new_booking = {
+                    "customer": self.current_user,
+                    "driver": selected_driver,
+                    "from": from_location,
+                    "to": to_location,
+                    "vehicle_type": vehicle_type,
+                    "distance": distance,
+                    "fare": fare,
+                    "date": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "status": "Pending"
+                }
+                self.bookings.append(new_booking)
+                save_data(BOOKINGS_FILE, self.bookings)
+                QMessageBox.information(self, "Success", "Ride booked successfully, awaiting driver approval.")
+
+    def view_ride_history(self):
+        history = "\n".join(f"Ride {i + 1}: {b.get('from', 'N/A')} to {b.get('to', 'N/A')} - {b.get('distance', 0)} km, Fare: ${b.get('fare', 0.0):.2f}, Date: {b.get('date', 'N/A')}, Status: {b.get('status', 'N/A')}"
+                            for i, b in enumerate(self.bookings) if b.get('customer') == self.current_user)
+        if history:
+            QMessageBox.information(self, "Ride History", history)
+        else:
+            QMessageBox.information(self, "No Rides", "No ride history found.")
+
+    def cancel_ride(self):
+        ride_id, ok = QInputDialog.getInt(self, "Cancel Ride", "Enter ride ID to cancel:", 1, 1, len(self.bookings))
+        if ok:
+            if 0 < ride_id <= len(self.bookings):
+                ride = self.bookings[ride_id - 1]
+                if ride.get('customer') == self.current_user and ride.get('status') == "Pending":
+                    self.bookings.remove(ride)
+                    save_data(BOOKINGS_FILE, self.bookings)
+                    QMessageBox.information(self, "Success", "Ride canceled successfully.")
+                else:
+                    QMessageBox.warning(self, "Error", "This ride cannot be canceled.")
+            else:
+                QMessageBox.warning(self, "Error", "Invalid ride ID.")
+
+    def view_available_drivers(self):
+        driver_list = "\n".join(driver.get('username', 'N/A') for driver in self.drivers)
+        if driver_list:
+            QMessageBox.information(self, "Available Drivers", driver_list)
+        else:
+            QMessageBox.information(self, "No Drivers", "No drivers available.")
+
+    def provide_feedback(self):
+        feedback, ok = QInputDialog.getText(self, "Provide Feedback", "Enter your feedback:")
+        if ok and feedback:
+            QMessageBox.information(self, "Feedback", "Thank you for your feedback!")
+
+    def schedule_ride(self):
+        QMessageBox.information(self, "Schedule Ride", "This feature is not yet implemented.")
+
+    def rate_ride(self):
+        QMessageBox.information(self, "Rate Ride", "This feature is not yet implemented.")
+
+    def driver_menu(self):
+        self.clear_layout()
+        self.title.setText("Driver Menu")
+        self.layout.addWidget(self.title)
+
+        self.view_earnings_button = self.create_button("View Earnings")
+        self.accept_ride_button = self.create_button("Accept Ride Request")
+        self.complete_ride_button = self.create_button("Complete Ride")
+        self.logout_button = self.create_button("Logout")
+
+        self.layout.addWidget(self.view_earnings_button)
+        self.layout.addWidget(self.accept_ride_button)
+        self.layout.addWidget(self.complete_ride_button)
+        self.layout.addWidget(self.logout_button)
+
+        self.view_earnings_button.clicked.connect(self.view_earnings)
+        self.accept_ride_button.clicked.connect(self.accept_ride)
+        self.complete_ride_button.clicked.connect(self.complete_ride)
+        self.logout_button.clicked.connect(self.logout)
+
+    def view_earnings(self):
+        total_earnings = sum(b.get('fare', 0.0) for b in self.bookings if b.get('driver') == self.current_user and b.get('status') == "Completed")
+        QMessageBox.information(self, "Earnings", f"Total earnings: ${total_earnings:.2f}")
+
+    def accept_ride(self):
+        ride_id, ok = QInputDialog.getInt(self, "Accept Ride", "Enter ride ID to accept:", 1, 1, len(self.bookings))
+        if ok:
+            if 0 < ride_id <= len(self.bookings):
+                ride = self.bookings[ride_id - 1]
+                if ride.get('driver') == self.current_user and ride.get('status') == "Pending":
+                    ride['status'] = "Accepted"
+                    save_data(BOOKINGS_FILE, self.bookings)
+                    QMessageBox.information(self, "Success", "Ride accepted successfully.")
+                else:
+                    QMessageBox.warning(self, "Error", "You cannot accept this ride.")
+            else:
+                QMessageBox.warning(self, "Error", "Invalid ride ID.")
+
+    def complete_ride(self):
+        ride_id, ok = QInputDialog.getInt(self, "Complete Ride", "Enter ride ID to complete:", 1, 1, len(self.bookings))
+        if ok:
+            if 0 < ride_id <= len(self.bookings):
+                ride = self.bookings[ride_id - 1]
+                if ride.get('driver') == self.current_user and ride.get('status') == "Accepted":
+                    ride['status'] = "Completed"
+                    save_data(BOOKINGS_FILE, self.bookings)
+                    QMessageBox.information(self, "Success", "Ride completed successfully.")
+                else:
+                    QMessageBox.warning(self, "Error", "You cannot complete this ride.")
+            else:
+                QMessageBox.warning(self, "Error", "Invalid ride ID.")
+
+    def reset_password(self):
+        username = self.username_input.text()
+        new_password, ok = QInputDialog.getText(self, "Reset Password", "Enter new password:", QLineEdit.Password)
+        if ok and new_password:
+            for user in self.customers + self.drivers:
+                if user.get('username') == username:
+                    user['password'] = new_password
+                    save_data(CUSTOMERS_FILE if user in self.customers else DRIVERS_FILE, self.customers + self.drivers)
+                    QMessageBox.information(self, "Success", "Password reset successfully!")
+                    return
+            QMessageBox.warning(self, "Error", "Username not found.")
+
+    def logout(self):
+        self.current_user = None
+        self.user_type = None
+        self.show_main_menu()
+
+    def show_main_menu(self):
+        self.clear_layout()
+        self.title.setText("Welcome to Taxi Service")
+        self.layout.addWidget(self.title)
+
+        self.login_button = self.create_button("Login")
+        self.register_customer_button = self.create_button("Register as Customer")
+        self.register_driver_button = self.create_button("Register as Driver")
+        self.layout.addWidget(self.login_button)
+        self.layout.addWidget(self.register_customer_button)
+        self.layout.addWidget(self.register_driver_button)
+
+        self.login_button.clicked.connect(self.show_login)
+        self.register_customer_button.clicked.connect(self.show_registration_customer)
+        self.register_driver_button.clicked.connect(self.show_registration_driver)
+
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    taxi_booking_app = TaxiBookingApp()
+    taxi_booking_app.show()
+    sys.exit(app.exec_())
